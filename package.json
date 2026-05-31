@@ -4,10 +4,10 @@
   "description": "Scan your LAN for Solid pods + Nostr relays and write a hosts.jsonld directory into your pod's /private — an /etc/hosts for your pod.",
   "type": "module",
   "bin": {
-    "podscan": "scan.mjs"
+    "podscan": "scan.js"
   },
   "scripts": {
-    "start": "node scan.mjs"
+    "start": "node scan.js"
   },
   "keywords": [
     "solid",
