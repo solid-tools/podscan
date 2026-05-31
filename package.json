@@ -1,0 +1,36 @@
+{
+  "name": "podscan",
+  "version": "0.1.0",
+  "description": "Scan your LAN for Solid pods + Nostr relays and write a hosts.jsonld directory into your pod's /private — an /etc/hosts for your pod.",
+  "type": "module",
+  "bin": {
+    "podscan": "scan.mjs"
+  },
+  "scripts": {
+    "start": "node scan.mjs"
+  },
+  "keywords": [
+    "solid",
+    "nostr",
+    "lan",
+    "discovery",
+    "webid",
+    "relay",
+    "jsonld"
+  ],
+  "dependencies": {
+    "ws": "^8.21.0"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/solid-tools/podscan.git"
+  },
+  "bugs": {
+    "url": "https://github.com/solid-tools/podscan/issues"
+  },
+  "homepage": "https://github.com/solid-tools/podscan#readme"
+}
