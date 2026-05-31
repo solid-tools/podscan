@@ -1,8 +1,9 @@
 # podscan
 
 **An `/etc/hosts` for your Solid pod.** Scan your LAN for machines, detect which run a
-Nostr relay (default port `4444`), resolve the verified WebID identities behind them, and
-write it all into your pod's `/private` as a JSON-LD directory your web apps can read.
+Nostr relay (a JSS pod at `<pod-port>/relay`, or a standalone relay on `:4444`), resolve the
+verified WebID identities behind them, and write it all into your pod's `/private` as a
+JSON-LD directory your web apps can read.
 
 ## Why
 
@@ -15,7 +16,7 @@ own pod). Run it on a schedule (cron / systemd timer) to keep the file warm.
 ```
  cron / CLI (privileged)                 browser app (any origin)
    nmap LAN sweep            writes          reads, same-origin
-   probe :4444 relays   ───►  /private/net/hosts.jsonld  ───►  "Local network" tab
+   probe <pod>/relay    ───►  /private/net/hosts.jsonld  ───►  "Local network" tab
    query kind-0 + WebID
 ```
 
@@ -37,8 +38,9 @@ Options:
 | flag | default | meaning |
 |---|---|---|
 | `--subnet` | auto-detect | CIDR to scan, e.g. `192.168.0.0/24` |
-| `--port` | `4444` | Nostr relay port to probe |
-| `--pod-port` | `5444` | pod HTTP port (for WebID card resolution) |
+| `--pod-port` | `5444` | pod HTTP port (WebID resolution **and** the relay) |
+| `--relay-path` | `/relay` | WebSocket path of the JSS relay (`<pod-port>/relay`) |
+| `--port` | `4444` | fallback port for a *standalone* relay (probed after `<pod-port>/relay`) |
 | `--out` | `~/pod-data/private/net/hosts.jsonld` | where to write |
 | `--ttl-days` | `7` | drop hosts unseen longer than this |
 | `--timeout` | `5000` | per-host probe timeout (ms) |

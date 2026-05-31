@@ -29,8 +29,9 @@ const flag = (name) => argv.includes('--' + name)
 if (cmd !== 'scan') { console.error('usage: podscan scan [options] — see --help'); process.exit(2) }
 if (flag('help')) { console.log(readFileSync(new URL('./README.md', import.meta.url), 'utf8')); process.exit(0) }
 
-const PORT = Number(opt('port', 4444))
 const POD_PORT = Number(opt('pod-port', 5444))
+const RELAY_PATH = String(opt('relay-path', '/relay')) // JSS relay lives at <pod-port>/relay
+const PORT = Number(opt('port', 4444))                 // fallback: a standalone relay on its own port
 const TIMEOUT = Number(opt('timeout', 5000))
 const TTL = Number(opt('ttl-days', 7)) * 86400e3
 const OUT = String(opt('out', homedir() + '/pod-data/private/net/hosts.jsonld'))
@@ -131,7 +132,7 @@ const CONTEXT = {
 async function main() {
   const subnet = String(opt('subnet', '') || detectSubnet() || '')
   if (!subnet) { console.error('Could not detect subnet — pass --subnet 192.168.0.0/24'); process.exit(1) }
-  console.error(`podscan: scanning ${subnet} (relay :${PORT})…`)
+  console.error(`podscan: scanning ${subnet} (relays at :${POD_PORT}${RELAY_PATH} or :${PORT})…`)
 
   const up = nmapHosts(subnet)
   const macs = macMap()
@@ -141,9 +142,12 @@ async function main() {
   const scanned = []
   for (const h of up) {
     const entry = { ip: h.ip, hostname: h.hostname, mac: macs[h.ip] || null, lastSeen: stamp }
-    const { up: relayUp, events } = await queryRelay(`ws://${h.ip}:${PORT}`)
-    if (relayUp) {
-      entry.services = [{ '@type': 'lan:NostrRelay', relay: `ws://${h.ip}:${PORT}`, up: true }]
+    // JSS pods serve their relay at <pod-port>/relay; standalone relays sit on their own port.
+    const candidates = [`ws://${h.ip}:${POD_PORT}${RELAY_PATH}`, `ws://${h.ip}:${PORT}`]
+    let relayUrl = null, events = []
+    for (const cand of candidates) { const r = await queryRelay(cand); if (r.up) { relayUrl = cand; events = r.events; break } }
+    if (relayUrl) {
+      entry.services = [{ '@type': 'lan:NostrRelay', relay: relayUrl, up: true }]
       const profiles = profilesFrom(events)
       const ids = []
       for (const pr of profiles) {
@@ -151,7 +155,7 @@ async function main() {
         ids.push({ pubkey: pr.pubkey, name: pr.name || pr.display_name || null, webid: webid || undefined, verified: !!webid })
       }
       if (ids.length) entry.identities = ids
-      console.error(`  ✓ ${h.ip} relay up — ${ids.length} identities (${ids.filter((i) => i.verified).length} WebID-verified)`)
+      console.error(`  ✓ ${h.ip} relay ${relayUrl} — ${ids.length} identities (${ids.filter((i) => i.verified).length} WebID-verified)`)
     }
     scanned.push(entry)
   }
