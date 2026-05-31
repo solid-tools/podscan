@@ -134,18 +134,38 @@ async function main() {
   if (!subnet) { console.error('Could not detect subnet — pass --subnet 192.168.0.0/24'); process.exit(1) }
   console.error(`podscan: scanning ${subnet} (relays at :${POD_PORT}${RELAY_PATH} or :${PORT})…`)
 
+  // Read the previous file up front so we can re-probe known pods directly —
+  // nmap -sn drops hosts that ignore ICMP, but if a relay answers the host is up.
+  let prev = null
+  if (existsSync(OUT)) { try { prev = JSON.parse(readFileSync(OUT, 'utf8')) } catch {} }
+  const prevByIp = {}
+  for (const h of arr(prev && prev.hosts)) prevByIp[h.ip] = h
+
   const up = nmapHosts(subnet)
   const macs = macMap()
-  console.error(`  ${up.length} hosts up; probing relays…`)
+  const upIps = new Set(up.map((h) => h.ip))
+  // Probe these directly even if nmap missed them: IPs that were pods last time + explicit --probe.
+  const knownPods = Object.values(prevByIp).filter((h) => arr(h.services).some((s) => s && s.relay)).map((h) => h.ip)
+  const explicit = String(opt('probe', '') || '').split(',').map((s) => s.trim()).filter(Boolean)
+  const extra = [...new Set([...knownPods, ...explicit])].filter((ip) => !upIps.has(ip))
+    .map((ip) => ({ ip, hostname: (prevByIp[ip] && prevByIp[ip].hostname) || null, viaRelay: true }))
+  const targets = [...up, ...extra]
+  console.error(`  ${up.length} hosts up${extra.length ? ` (+${extra.length} known pods probed directly)` : ''}; probing relays…`)
 
   const stamp = now()
   const scanned = []
-  for (const h of up) {
-    const entry = { ip: h.ip, hostname: h.hostname, mac: macs[h.ip] || null, lastSeen: stamp }
+  for (const h of targets) {
     // JSS pods serve their relay at <pod-port>/relay; standalone relays sit on their own port.
     const candidates = [`ws://${h.ip}:${POD_PORT}${RELAY_PATH}`, `ws://${h.ip}:${PORT}`]
     let relayUrl = null, events = []
     for (const cand of candidates) { const r = await queryRelay(cand); if (r.up) { relayUrl = cand; events = r.events; break } }
+    if (!relayUrl && h.viaRelay) continue // nmap missed it and its relay isn't answering → let TTL age it out
+    const entry = {
+      ip: h.ip,
+      hostname: h.hostname || (prevByIp[h.ip] && prevByIp[h.ip].hostname) || null,
+      mac: macs[h.ip] || (prevByIp[h.ip] && prevByIp[h.ip].mac) || null,
+      lastSeen: stamp
+    }
     if (relayUrl) {
       entry.services = [{ '@type': 'lan:NostrRelay', relay: relayUrl, up: true }]
       const profiles = profilesFrom(events)
@@ -155,18 +175,15 @@ async function main() {
         ids.push({ pubkey: pr.pubkey, name: pr.name || pr.display_name || null, webid: webid || undefined, verified: !!webid })
       }
       if (ids.length) entry.identities = ids
-      console.error(`  ✓ ${h.ip} relay ${relayUrl} — ${ids.length} identities (${ids.filter((i) => i.verified).length} WebID-verified)`)
+      console.error(`  ✓ ${h.ip} relay ${relayUrl}${h.viaRelay ? ' (direct)' : ''} — ${ids.length} identities (${ids.filter((i) => i.verified).length} WebID-verified)`)
     }
     scanned.push(entry)
   }
 
   // merge with previous file (age out hosts unseen beyond TTL)
-  let prev = null
-  if (existsSync(OUT)) { try { prev = JSON.parse(readFileSync(OUT, 'utf8')) } catch {} }
-  const byIp = {}
-  for (const h of arr(prev && prev.hosts)) byIp[h.ip] = h
+  const byIp = { ...prevByIp }
   const cutoff = Date.now() - TTL
-  for (const h of scanned) { h.firstSeen = (byIp[h.ip] && byIp[h.ip].firstSeen) || stamp; byIp[h.ip] = h }
+  for (const h of scanned) { h.firstSeen = (prevByIp[h.ip] && prevByIp[h.ip].firstSeen) || stamp; byIp[h.ip] = h }
   const merged = Object.values(byIp).filter((h) => new Date(h.lastSeen).getTime() >= cutoff)
     .sort((a, b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }))
 

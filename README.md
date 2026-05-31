@@ -41,12 +41,17 @@ Options:
 | `--pod-port` | `5444` | pod HTTP port (WebID resolution **and** the relay) |
 | `--relay-path` | `/relay` | WebSocket path of the JSS relay (`<pod-port>/relay`) |
 | `--port` | `4444` | fallback port for a *standalone* relay (probed after `<pod-port>/relay`) |
+| `--probe` | — | extra IPs to relay-probe directly even if nmap misses them, e.g. `192.168.0.250,192.168.0.42` |
 | `--out` | `~/pod-data/private/net/hosts.jsonld` | where to write |
 | `--ttl-days` | `7` | drop hosts unseen longer than this |
 | `--timeout` | `5000` | per-host probe timeout (ms) |
 | `--json` | — | print to stdout instead of writing the file |
 
 Run `sudo podscan scan` for ARP-based discovery (faster, finds hosts that drop ping).
+
+Hosts that were pods in the previous `hosts.jsonld` are **re-probed directly** every scan, so a
+pod whose relay is answering stays online even when `nmap -sn` misses it (ICMP gets dropped a
+lot). Use `--probe` to seed pod IPs nmap never sees.
 
 ## Output
 
